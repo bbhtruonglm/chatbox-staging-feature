@@ -381,17 +381,21 @@ const LIMIT = 80
 /** Trang hiện tại (bắt đầu từ 0 hoặc 1, tùy backend) */
 const current_page = ref(0)
 
-/** Hàm xử lý khi chuyển trang */
+/** Hàm xử lý khi chuyển trang
+ * @param page
+ * @param direction
+ */
 const handlePageChange = (page: number, direction: 'next' | 'prev') => {
+  /** Đang loading thì return */
   if (is_loading.value) return
-
+  /** Nếu ấn next hoặc prev thì fix skip chuẩn theo số trang*/
   if (direction === 'next') {
     skip.value += LIMIT * current_page.value
   } else if (direction === 'prev') {
     skip.value =
       LIMIT * (current_page.value - 1 > 0 ? current_page.value - 1 : 0)
   }
-
+  /** Trang hiện tại (-1 vì index) */
   current_page.value = page - 1
   getFiles()
 }
