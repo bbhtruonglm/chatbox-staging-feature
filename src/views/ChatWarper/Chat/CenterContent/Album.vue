@@ -360,6 +360,7 @@ import { ArrowLeftIcon, LinkIcon, TrashIcon } from '@heroicons/vue/24/outline'
 import { getItem, setItem } from '@/service/helper/localStorage'
 import ModalChangeAlbumSource from './ModalChangeAlbumSource.vue'
 import Pagination from './Pagination.vue'
+import { normalizeFileName } from '@/utils/helper/Validate'
 
 /**các giá tị của danh mục */
 type CategoryType = 'NEW' | 'FOLDER'
@@ -1038,84 +1039,109 @@ function addDataToFileList(
 }
 
 /**
- * chọn file từ thiết bị để thêm vào album
- * @deprecated dùng qua UploadFile ở utils
+ * Chọn file từ thiết bị để upload lên album.
+ * ⚠️ @deprecated: Hàm này đã lỗi thời, nên dùng `UploadFile` trong `utils` thay thế.
+ *
+ * - Tạo thẻ `<input type="file">` tạm thời để mở hộp chọn file của thiết bị.
+ * - Cho phép chọn nhiều file (multiple).
+ * - Chuẩn hóa tên file, tạo FormData và upload từng file theo thứ tự.
+ * - Tự động xác định `page_id` tương ứng để gửi file đúng album.
+ * - Hiển thị thông báo khi upload hoàn tất.
  */
 function uploadFileFromDevice() {
-  /**input upload file */
+  /** Tạo phần tử input ẩn để người dùng chọn file từ thiết bị */
   const INPUT = document.createElement('input')
-
-  /** thêm các thuộc tính cần thiết */
+  /** Cho phép chọn file */
   INPUT.type = 'file'
+  /** Cho phép chọn nhiều file cùng lúc */
   INPUT.multiple = true
+  /** Ẩn khỏi giao diện người dùng */
   INPUT.style.display = 'none'
 
-  /** hàm xử lý sau khi upload thành công */
+  /** Khi người dùng chọn file xong */
   INPUT.onchange = () => {
+    /** 🧩 fix null here */
+    if (!INPUT.files || INPUT.files.length === 0) return
+    /** Hiển thị trạng thái loading trong giao diện */
     is_loading.value = true
 
-    /** xử upload file */
+    /**
+     * Duyệt qua từng file theo giới hạn đồng thời là 1 (upload tuần tự),
+     * dùng `eachOfLimit` để xử lý bất đồng bộ có kiểm soát.
+     */
     eachOfLimit(
       INPUT.files,
       1,
       (file: File, i, next) => {
-        /**dữ liệu upload */
-        const FORM = new FormData()
-        FORM.append('file', file)
+        /** 🔹 Chuẩn hóa tên file để tránh lỗi ký tự đặc biệt */
+        const CLEAN_NAME = normalizeFileName(file.name)
 
-        /** Lấy dữ liệu từ localStorage */
+        /** Tạo lại đối tượng File mới với tên đã chuẩn hóa */
+        const NEW_FILE = new File([file], CLEAN_NAME, { type: file.type })
+
+        console.log(NEW_FILE, 'normalized file')
+
+        /** Tạo FormData chứa file để upload */
+        const FORM = new FormData()
+        FORM.append('file', NEW_FILE)
+
+        /** Lấy danh sách page_id được lưu trong localStorage */
         const PAGE_ID_MAP = getItem('album_page_id') || {}
-        /** ID mặc định */
+
+        /** Lấy page_id mặc định từ conversation hiện tại */
         const DEFAULT_ID =
           conversationStore.select_conversation?.fb_page_id || ''
 
-        /** ✅ Xác định NEW_PAGE_ID */
+        /** Mặc định sử dụng page_id hiện tại */
         let new_page_id = DEFAULT_ID
 
+        /**
+         * Nếu có ánh xạ page_id trong localStorage:
+         * - Ưu tiên page_id trùng với DEFAULT_ID.
+         * - Nếu không có, lấy page_id đầu tiên trong danh sách.
+         */
         if (Object.keys(PAGE_ID_MAP).length > 0) {
-          if (PAGE_ID_MAP[DEFAULT_ID] && PAGE_ID_MAP[DEFAULT_ID].length > 0) {
-            // 🟢 Nếu map có chứa DEFAULT_ID → lấy phần tử đầu tiên của mảng đó
+          /** Ưu tiên page_id trùng với DEFAULT_ID */
+          if (PAGE_ID_MAP[DEFAULT_ID]?.length > 0) {
+            /** Gán page_id mới */
             new_page_id = PAGE_ID_MAP[DEFAULT_ID][0]
           } else {
-            // 🟡 Nếu không chứa DEFAULT_ID → lấy phần tử đầu tiên của map
+            /** Lấy page_id đầu tiên trong danh sách ánh xạ */
             const FIRST_KEY = Object.keys(PAGE_ID_MAP)[0]
+            /** Lấy mảng page_id tương ứng */
             const FIRST_ARRAY = PAGE_ID_MAP[FIRST_KEY]
+            /** Kiểm tra mảng page_id có hợp lệ không */
             if (Array.isArray(FIRST_ARRAY) && FIRST_ARRAY.length > 0) {
               new_page_id = FIRST_ARRAY[0]
             }
           }
         }
 
-        /** upload lên server */
-        upload_file_album(
-          {
-            // page_id: conversationStore.select_conversation
-            //   ?.fb_page_id as string,
-            page_id: new_page_id,
-          },
-          FORM,
-          (e, r) => {
-            if (r) addDataToFileList([r], 'upload')
-
-            next()
-          }
-        )
+        /**
+         * Gọi API upload_file_album để tải file lên server.
+         * Truyền kèm page_id để xác định album đích.
+         * Khi upload xong, thêm file mới vào danh sách hiển thị.
+         */
+        upload_file_album({ page_id: new_page_id }, FORM, (e, r) => {
+          if (r) addDataToFileList([r], 'upload') /** Cập nhật UI sau upload */
+          next() /** Tiếp tục upload file tiếp theo */
+        })
       },
+      /** Callback sau khi tất cả file đã upload xong */
       e => {
-        is_loading.value = false
-
-        toast('success', $t('v1.common.success'))
+        is_loading.value = false /** Tắt trạng thái loading */
+        toast('success', $t('v1.common.success')) /** Thông báo thành công */
       }
     )
 
-    /** xoá input sau khi xong việc */
+    /** Xóa thẻ input khỏi DOM để dọn dẹp bộ nhớ */
     if (INPUT && INPUT.parentNode) INPUT.parentNode.removeChild(INPUT)
   }
 
-  /** thêm input vào html */
+  /** Gắn thẻ input vào DOM tạm thời để trình duyệt nhận sự kiện click */
   document.body.appendChild(INPUT)
 
-  /** click vào input */
+  /** Kích hoạt click() để mở hộp thoại chọn file của hệ thống */
   INPUT.click()
 }
 

@@ -1,7 +1,8 @@
-import isEmail from 'validator/lib/isEmail'
 import { addMethod, string } from 'yup'
 
-// khai báo thêm phương thức
+import isEmail from 'validator/lib/isEmail'
+
+/** khai báo thêm phương thức */
 declare module 'yup' {
   interface StringSchema {
     /**kiểm tra không chứa khoảng trắng */
@@ -9,11 +10,11 @@ declare module 'yup' {
   }
 }
 
-// thêm phương thức kiểm tra không chứa khoảng trắng
+/** thêm phương thức kiểm tra không chứa khoảng trắng */
 addMethod(string, 'noWhitespace', function (message) {
-  // trả về thông báo lỗi nếu giá trị chứa khoảng trắng
+  /** trả về thông báo lỗi nếu giá trị chứa khoảng trắng */
   return this.test('no-whitespace', message, function (value) {
-    // lấy đường dẫn và thông báo lỗi
+    /** lấy đường dẫn và thông báo lỗi */
     const { path: PATH, createError } = this
 
     /**kiểm tra giá trị không được toàn là khoảng trắng */
@@ -31,16 +32,16 @@ addMethod(string, 'noWhitespace', function (message) {
       message: message || 'This field cannot contain only whitespace',
     })
 
-    // trả về kết quả
+    /** trả về kết quả */
     return CHECK_TOTAL || ERROR
   })
 })
 
-// sửa phương thức kiểm tra email của yup không chuẩn
+/** sửa phương thức kiểm tra email của yup không chuẩn */
 addMethod(string, 'email', function (message) {
-  // trả về thông báo lỗi nếu giá trị chứa khoảng trắng
+  /** trả về thông báo lỗi nếu giá trị chứa khoảng trắng */
   return this.test('email', message, function (value) {
-    // lấy đường dẫn và thông báo lỗi
+    /** lấy đường dẫn và thông báo lỗi */
     const { path: PATH, createError } = this
 
     /**lỗi được tạo */
@@ -49,7 +50,21 @@ addMethod(string, 'email', function (message) {
       message: message || 'Email is not valid',
     })
 
-    // trả về kết quả
+    /** trả về kết quả */
     return isEmail(value || '') || ERROR
   })
 })
+
+/**
+ * Chuẩn hóa tên file: bỏ dấu, chuyển thường, thay khoảng trắng bằng '-'
+ */
+export function normalizeFileName(name: string): string {
+  return name
+    .normalize('NFD') // tách dấu tiếng Việt
+    .replace(/[\u0300-\u036f]/g, '') // xóa dấu
+    .replace(/đ/g, 'd') // thay ký tự đặc biệt
+    .replace(/Đ/g, 'd')
+    .replace(/\s+/g, '-') // khoảng trắng -> gạch ngang
+    .replace(/[^a-zA-Z0-9.\-_]/g, '') // loại ký tự lạ, giữ lại a-z 0-9 . - _
+    .toLowerCase()
+}
