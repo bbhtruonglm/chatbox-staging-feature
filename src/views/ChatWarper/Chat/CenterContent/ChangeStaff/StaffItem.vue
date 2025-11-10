@@ -14,7 +14,7 @@
         />
         <div
           v-else
-          class="rounded-full mr-3 w-9 h-9 flex items-center justify-center bg-gray-200 text-gray-600 text-xs font-medium"
+          class="rounded-full flex-shrink-0 mr-3 w-9 h-9 flex items-center justify-center bg-gray-200 text-gray-600 text-xs font-medium"
         >
           ✖
         </div>
@@ -25,7 +25,11 @@
           }"
           class="text-sm"
         >
-          {{ staff ? staff.name : 'Không chọn nhân viên' }}
+          {{
+            staff
+              ? staff.name
+              : $t('v1.view.main.dashboard.chat.filter.staff.not_select_staff')
+          }}
         </p>
       </div>
 
