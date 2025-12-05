@@ -61,7 +61,7 @@ import {
 } from '@/stores'
 import { usePageManager } from '@/views/Dashboard/composables/usePageManager'
 import { filter, pickBy, size } from 'lodash'
-import { computed, nextTick, onMounted, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 
 import CardItem from '@/components/Main/Dashboard/CardItem.vue'
 import Group from '@/views/Dashboard/SelectPage/AllOrg/Org/Group.vue'
@@ -71,7 +71,6 @@ import OrgTitleAction from '@/views/Dashboard/SelectPage/AllOrg/Org/OrgTitleActi
 import BriefCaseIcon from '@/components/Icons/BriefCase.vue'
 
 import type { PageData } from '@/service/interface/app/page'
-import { BillingAppGroup } from '@/utils/api/Billing'
 
 const $props = withDefaults(
   defineProps<{
@@ -94,24 +93,31 @@ const active_page_list = defineModel<PageData[]>('active_page_list')
 
 /** danh sách các page thuộc tổ chức hiện tại */
 const page_of_current_org = computed(() => {
+  // console.log(pageStore.active_page_list, 'active_page_list')
   return pickBy(pageStore.active_page_list, page => {
     return $main.isInCurrentOrg(page)
   })
 })
 
 /** danh sách sau khi đã lọc theo nhóm */
-const filter_page_list = computed(() =>
-  filterPageByGroup(
+const filter_page_list = computed(() => {
+  console.log(page_of_current_org.value, 'page_of_current_org')
+  console.log(pageManagerStore.pape_to_group_map, 'pape_to_group_map')
+  console.log(pageStore.map_orgs?.map_page_org || {}, 'map_page_org')
+  console.log(orgStore.selected_org_group, 'selected_org_group')
+  return filterPageByGroup(
     page_of_current_org.value,
     pageManagerStore.pape_to_group_map,
     pageStore.map_orgs?.map_page_org || {},
     orgStore.selected_org_group
   )
-)
+})
 
 class Main {
   /**sắp xếp page gắn sao lên đầu */
   getListPage() {
+    console.log(filter_page_list.value, 'filter_page_list')
+    // console.log(filter_page_list.value, 'filter_page_list')
     // lọc ra các page thuộc về nhóm này
     active_page_list.value = sortListPage(filter_page_list.value)
   }
