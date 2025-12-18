@@ -152,8 +152,7 @@ class Main {
   @error()
   async readGroup() {
     // Đọc danh sách nhóm
-    // groups.value = await new BillingAppGroup().readGroup()
-    groups.value = await new BillingAppGroup().readAllGroup()
+    groups.value = await new BillingAppGroup().readGroup()
     // groups.value = await this.API_GROUP.readGroup()
   }
 

@@ -1,15 +1,15 @@
-import { useChatbotUserStore, useMessageStore, useOrgStore } from '@/stores'
-
-import { BillingAppOrganization } from '@/utils/api/Billing'
-import type { CbError } from '@/service/interface/function'
-import { flow } from '@/service/helper/async'
+import { read_me_chatbot_user } from '@/service/api/chatbox/n4-service'
 import { getCurrentOrgInfo } from '@/service/function'
-import { getItem } from '@/service/helper/localStorage'
+import { toastError } from '@/service/helper/alert'
+import { flow } from '@/service/helper/async'
 import { handleFileLocal } from '@/service/helper/file'
+import { getItem } from '@/service/helper/localStorage'
+import { useChatbotUserStore, useMessageStore, useOrgStore } from '@/stores'
+import { BillingAppOrganization } from '@/utils/api/Billing'
 import { map } from 'lodash'
 import { onMounted } from 'vue'
-import { read_me_chatbot_user } from '@/service/api/chatbox/n4-service'
-import { toastError } from '@/service/helper/alert'
+
+import type { CbError } from '@/service/interface/function'
 
 /** load các dữ liệu cần thiết của giao diện */
 export function initRequireData() {
@@ -58,8 +58,6 @@ export function initRequireData() {
       // lấy danh sách các tổ chức
       orgStore.list_org = await new BillingAppOrganization().readOrg()
 
-      console.log(orgStore.list_org, 'lisst org')
-
       // tự động lấy thông tin tổ chức hiện tại
       getCurrentOrgInfo()
     } catch (e) {
@@ -87,6 +85,6 @@ export function useDropFile() {
     map($event.dataTransfer?.files, file => handleFileLocal(file))
   }
   return {
-    onDropFile,
+    onDropFile
   }
 }
