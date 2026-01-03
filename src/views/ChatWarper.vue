@@ -14,12 +14,12 @@
     <Menu />
     <Layout>
       <template #left>
-        <LeftBar />
+        <LeftBar :is_loading="is_init_loading" />
       </template>
       <template #right>
         <div class="flex gap-2 h-full">
-          <CenterContent />
-          <RightBar />
+          <CenterContent :is_loading="should_show_skeleton" />
+          <RightBar :is_loading="should_show_skeleton" />
         </div>
       </template>
     </Layout>
@@ -66,7 +66,7 @@ import { initRequireData, useDropFile } from '@/views/composable'
 import { debounce, difference, intersection, keys, map, size } from 'lodash'
 import { storeToRefs } from 'pinia'
 import { container } from 'tsyringe'
-import { onMounted, onUnmounted, ref, toRef, watch } from 'vue'
+import { onMounted, onUnmounted, ref, toRef, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
@@ -114,6 +114,19 @@ const is_focus_chat_tab = ref(true)
 /**ref modal cảnh báo hết gói */
 const ref_alert_reach_quota = ref<InstanceType<typeof AlertRechQuota>>()
 
+/** cờ đang khởi tạo dữ liệu */
+const is_init_loading = ref(true)
+
+/** Có nên hiển thị skeleton loading cho center va right bar ko */
+const should_show_skeleton = computed(() => {
+  return (
+    is_init_loading.value ||
+    conversationStore.is_loading_list ||
+    (size(conversationStore.conversation_list) > 0 &&
+      !conversationStore.select_conversation)
+  )
+})
+
 watch(
   () => conversationStore.select_conversation,
   (new_val, old_val) => getTokenOfWidget(new_val, old_val)
@@ -122,6 +135,7 @@ watch(
 onMounted(() => {
   checkOverLimit()
 
+  // $main.getPageInfoToChat()
   $main.getPageInfoToChat()
 
   $main.getPageOfCurrentOrg()
@@ -235,7 +249,7 @@ function initExtensionLogic() {
       // nạp thông tin khách hàng
       if (r?.info) {
         // nếu có thông tin khách hàng thì bật cờ có thông tin mới lên
-        if(conversationStore.select_conversation) {
+        if (conversationStore.select_conversation) {
           conversationStore.select_conversation.has_new_info_from_ext = true
         }
 
@@ -610,7 +624,7 @@ class CustomToast extends Toast implements IAlert {
 
 class Main {
   /**đọc dữ liệu của các page được chọn lưu lại */
-  @loading(toRef(commonStore, 'is_loading_full_screen'))
+  /**đọc dữ liệu của các page được chọn lưu lại */
   // nếu lỗi thì chuyển về trang chọn page
   @error(new CustomToast())
   async getPageInfoToChat() {
@@ -626,55 +640,67 @@ class Main {
     // nạp lại dữ liệu của tổ chức hiện tại đang chọn cho chắc
     getCurrentOrgInfo()
 
-    // nếu vẫn không có tổ chức thì thôi
+    /** nếu vẫn không có tổ chức thì thôi */
     if (!orgStore.selected_org_id)
       throw $t('v1.view.main.dashboard.chat.error.get_org_info')
 
-    /**dữ liệu các trang đang chọn */
-    const PAGES = await new N4SerivceAppPage().getPageInfoToChat(
-      orgStore.selected_org_id,
-      SELECTED_PAGE_IDS,
-      true
-    )
+    try {
+      /**dữ liệu các trang đang chọn */
+      // const PAGES_OLD = await new N4SerivceAppPage().getPageInfoToChat(
+      //   orgStore.selected_org_id,
+      //   SELECTED_PAGE_IDS,
+      //   true
+      // )
+      const PAGES = await new N4SerivceAppPage().getPageDetails(
+        orgStore.selected_org_id,
+        SELECTED_PAGE_IDS,
+        true
+      )
 
-    // nếu không có dữ liệu trang nào thì thôi
-    if (!PAGES) throw $t('v1.view.main.dashboard.chat.error.get_page_info')
+      // nếu không có dữ liệu trang nào thì thôi
+      if (!PAGES) throw $t('v1.view.main.dashboard.chat.error.get_page_info')
 
-    // lưu dữ liệu trang đã chọn
-    pageStore.selected_page_list_info = PAGES
+      // lưu dữ liệu trang đã chọn
+      pageStore.selected_page_list_info = PAGES
 
-    // lưu dữ liệu nhân viên của các trang đã chọn
-    pageStore.selected_pages_staffs = User.getUsersInfo(PAGES)
+      // lưu dữ liệu nhân viên của các trang đã chọn
+      pageStore.selected_pages_staffs = User.getUsersInfo(PAGES)
 
-    // lưu lại các widget trên chợ, để map cta
-    pageStore.market_widgets = await new N5AppV1AppApp().readMarket()
+      // lưu lại các widget trên chợ, để map cta
+      pageStore.market_widgets = await new N5AppV1AppApp()
+        .readMarket()
+        .catch(() => undefined)
 
-    // khởi tạo kết nối socket lên server
-    $socket.connect(
-      $env.host.n3_socket,
-      keys(pageStore.selected_page_id_list),
-      chatbotUserStore.chatbot_user?.fb_staff_id || '',
-      handleSocketEvent
-    )
+      // khởi tạo kết nối socket lên server
+      $socket.connect(
+        $env.host.n3_socket,
+        keys(pageStore.selected_page_id_list),
+        chatbotUserStore.chatbot_user?.fb_staff_id || '',
+        handleSocketEvent
+      )
+    } finally {
+      // tắt loading initialization
+      is_init_loading.value = false
+    }
   }
 
   /** lấy danh sách trang của tổ chức hiện tại */
   async getPageOfCurrentOrg() {
-    // nếu không có id tổ chức thì thôi
+    /** nếu không có id tổ chức thì thôi */
     if (!orgStore.selected_org_id) return
 
     /**lấy danh sách trang của tổ chức hiện tại */
     const OSS = await read_os(orgStore.selected_org_id)
 
-    // lưu danh sách các trang của tổ chức hiện tại vào store
+    /** lưu danh sách các trang của tổ chức hiện tại vào store */
     orgStore.list_os = OSS
 
-    // lọc ra các trang zalo cá nhân
+    /** lọc ra các trang zalo cá nhân */
     this.markOrgHaveZalo(OSS)
   }
 
   /**đánh dấu xem tổ chức này có page zalo không */
-  markOrgHaveZalo(oss: OwnerShipInfo[]){
+  markOrgHaveZalo(oss: OwnerShipInfo[]) {
     /**lọc ra các trang zalo cá nhân */
     pageStore.zlp_oss = oss.filter(
       os => os?.page_info?.type === 'ZALO_PERSONAL'
