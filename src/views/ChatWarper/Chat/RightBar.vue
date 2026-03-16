@@ -3,7 +3,7 @@
   <div
     v-else
     id="chat__right-bar"
-    class="w-[400px] h-full flex-shrink-0 overflow-y-auto flex flex-col gap-2"
+    class="w-full h-full flex-shrink-0 overflow-y-auto flex flex-col gap-2"
   >
     <PostRightBar
       v-if="conversationStore.select_conversation?.conversation_type === 'POST'"
