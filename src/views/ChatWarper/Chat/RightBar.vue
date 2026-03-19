@@ -77,7 +77,7 @@
               class="w-full h-full"
               :src="widget.url"
               frameborder="0"
-              allow="microphone; camera; autoplay; speaker"
+              allow="microphone; camera; autoplay; speaker; clipboard-read; clipboard-write; fullscreen"
             />
           </div>
         </div>
