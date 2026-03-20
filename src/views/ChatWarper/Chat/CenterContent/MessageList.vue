@@ -184,12 +184,12 @@
       </div>
     </div>
     <div
-      v-if="is_ext_uploading"
+      v-if="IS_EXT_UPLOADING && EXT_UPLOAD_CLIENT_ID === select_conversation?.fb_client_id"
       class="absolute bottom-4 left-4 z-50 bg-white shadow flex items-center gap-1.5 px-2 py-1 text-[15px] text-slate-600 rounded-md border border-slate-200"
       style="transform: scale(0.7); transform-origin: left bottom;"
     >
-      <LoadingIcon class="!w-5 !h-5 !text-blue-200 !fill-blue-700" />
-      Đang tải ảnh lên {{ ext_upload_progress }}/{{ ext_upload_total }}
+      <LoadingIcon class="!size-5 !text-blue-200 !fill-blue-700" />
+      {{ $t('v1.view.main.dashboard.chat.uploading_image') }} {{ EXT_UPLOAD_PROGRESS }}/{{ EXT_UPLOAD_TOTAL }}
     </div>
   </div>
 </template>
@@ -265,9 +265,11 @@ const list_debounce_staff = ref<{
 }>({})
 
 /** tiến trình upload của extension */
-const is_ext_uploading = ref(false)
-const ext_upload_progress = ref(0)
-const ext_upload_total = ref(0)
+const IS_EXT_UPLOADING = ref<boolean>(false)
+const EXT_UPLOAD_PROGRESS = ref<number>(0)
+const EXT_UPLOAD_TOTAL = ref<number>(0)
+/** fb_client_id của conversation đang upload, dùng để chỉ hiển thị loading ở đúng kênh chat */
+const EXT_UPLOAD_CLIENT_ID = ref<string>('')
 
 /** hội thoại đang chọn */
 const select_conversation = computed(() => {
@@ -330,36 +332,40 @@ function onExtensionMessage($event: MessageEvent) {
   }
 
   /** bóc tách dữ liệu từ nhiều cấu trúc phản hồi khác nhau của extension */
-  const payload = data?.r || data?.data || data
+  const PAYLOAD = data?.r || data?.data || data
   
   // Kiểm tra nới lỏng: có the extension gửi 'event' thay vì 'action',
   // hoặc có khi chỉ trả về { progress, total, status }
-  const is_upload = 
-    payload?.action === 'UPLOAD_IMAGE' || data?.action === 'UPLOAD_IMAGE' ||
-    payload?.event === 'UPLOAD_IMAGE' || data?.event === 'UPLOAD_IMAGE' ||
-    payload?.event === 'RESPONSE_SEND_FILE' || data?.event === 'RESPONSE_SEND_FILE' ||
+  const IS_UPLOAD = 
+    PAYLOAD?.action === 'UPLOAD_IMAGE' || data?.action === 'UPLOAD_IMAGE' ||
+    PAYLOAD?.event === 'UPLOAD_IMAGE' || data?.event === 'UPLOAD_IMAGE' ||
+    PAYLOAD?.event === 'RESPONSE_SEND_FILE' || data?.event === 'RESPONSE_SEND_FILE' ||
     (data?.progress !== undefined && data?.total !== undefined) ||
-    (payload?.progress !== undefined && payload?.total !== undefined)
+    (PAYLOAD?.progress !== undefined && PAYLOAD?.total !== undefined)
 
-  if (is_upload) {
+  if (IS_UPLOAD) {
     // Ưu tiên object chứa thuộc tính progress
-    const info = payload?.progress !== undefined ? payload : data
+    const INFO = PAYLOAD?.progress !== undefined ? PAYLOAD : data
     
-    // Nếu event không chưa info.progress thì bỏ qua (avoid false positives)
-    if (info.progress === undefined) return
+    // Nếu event không chưa INFO.progress thì bỏ qua (avoid false positives)
+    if (INFO.progress === undefined) return
     
-    ext_upload_progress.value = info.progress || 0
-    ext_upload_total.value = info.total || 0
+    EXT_UPLOAD_PROGRESS.value = INFO.progress || 0
+    EXT_UPLOAD_TOTAL.value = INFO.total || 0
+    
+    // Chúng ta KHÔNG lấy client_id dựa trên `select_conversation` ở đây nữa,
+    // do bị delay từ ext và enduser có thể đang click sang hội thoại khác khiến sai scope.
+    // Việc lấy đúng client_id được xử lý qua event `chatbox_ext_upload_start` phát ra từ Input.vue lúc ấn gừi.
     
     // Luôn hiển thị UI khi nhận event
-    is_ext_uploading.value = true
+    IS_EXT_UPLOADING.value = true
 
     if (ext_upload_timeout) clearTimeout(ext_upload_timeout)
 
     // Nếu DONE hoặc tiến độ đã đạt 100% thì hẹn giờ tắt
-    if (info.status === 'DONE' || (info.total > 0 && info.progress >= info.total)) {
+    if (INFO.status === 'DONE' || (INFO.total > 0 && INFO.progress >= INFO.total)) {
       ext_upload_timeout = setTimeout(() => {
-        is_ext_uploading.value = false
+        IS_EXT_UPLOADING.value = false
       }, 2000)
     }
   }
@@ -410,6 +416,11 @@ onMounted(() => {
 
 // lắng nghe sự kiện tin nhắn mới, tạm thời ép kiểu
 listenerEventBus('chatbox_socket_message', socketNewMessage as Handler<unknown>)
+
+// Bắt đúng client_id scope cục bộ khi nhấn Upload (bỏ qua delay Ext) 
+listenerEventBus('chatbox_ext_upload_start', ((id: string) => {
+  EXT_UPLOAD_CLIENT_ID.value = id
+}) as Handler<unknown>)
 
 // lắng nghe sự kiện cập nhật tin nhắn, tạm thời ép kiểu
 listenerEventBus(

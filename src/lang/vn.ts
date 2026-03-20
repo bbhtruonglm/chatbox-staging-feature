@@ -710,6 +710,7 @@ const source: Language = {
             },
             you: 'Bạn:',
             empty_message: 'Hãy chọn 1 hội thoại để bắt đầu trò chuyện',
+            uploading_image: 'Đang tải ảnh lên',
             empty_conversation: 'Không tìm thấy hội thoại!',
             empty_select_conversation: 'Chọn một khách hàng để bắt đầu!',
             assign_staff: {
