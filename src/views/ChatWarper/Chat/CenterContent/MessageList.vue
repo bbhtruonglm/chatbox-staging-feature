@@ -183,14 +183,6 @@
         <SendStatus :is_error="message.error" />
       </div>
     </div>
-    <div
-      v-if="IS_EXT_UPLOADING && EXT_UPLOAD_CLIENT_ID === select_conversation?.fb_client_id"
-      class="absolute bottom-4 left-4 z-50 bg-white shadow flex items-center gap-1.5 px-2 py-1 text-[15px] text-slate-600 rounded-md border border-slate-200"
-      style="transform: scale(0.7); transform-origin: left bottom;"
-    >
-      <LoadingIcon class="!size-5 !text-blue-200 !fill-blue-700" />
-      {{ $t('v1.view.main.dashboard.chat.uploading_image') }} {{ EXT_UPLOAD_PROGRESS }}/{{ EXT_UPLOAD_TOTAL }}
-    </div>
   </div>
 </template>
 <script setup lang="ts">
@@ -207,7 +199,7 @@ import {
   useOrgStore,
 } from '@/stores'
 import { debounce, findLastIndex, remove, size, sortedIndexBy } from 'lodash'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import ClientAvatar from '@/components/Avatar/ClientAvatar.vue'
 import StaffAvatar from '@/components/Avatar/StaffAvatar.vue'
@@ -226,7 +218,6 @@ import UnReadAlert from '@/views/ChatWarper/Chat/CenterContent/MessageList/UnRea
 
 import ChatIcon from '@/components/Icons/Chat.vue'
 import DoubleCheckIcon from '@/components/Icons/DoubleCheck.vue'
-import LoadingIcon from '@/components/Icons/Loading.vue'
 
 import type { MessageInfo } from '@/service/interface/app/message'
 import type { CbError } from '@/service/interface/function'
@@ -263,13 +254,6 @@ const old_position_to_bottom = ref(0)
 const list_debounce_staff = ref<{
   [index: string]: DebouncedFunc<any>
 }>({})
-
-/** tiến trình upload của extension */
-const IS_EXT_UPLOADING = ref<boolean>(false)
-const EXT_UPLOAD_PROGRESS = ref<number>(0)
-const EXT_UPLOAD_TOTAL = ref<number>(0)
-/** fb_client_id của conversation đang upload, dùng để chỉ hiển thị loading ở đúng kênh chat */
-const EXT_UPLOAD_CLIENT_ID = ref<string>('')
 
 /** hội thoại đang chọn */
 const select_conversation = computed(() => {
@@ -313,69 +297,9 @@ const last_client_message_index = computed(() =>
   ),
 )
 
-// hủy lắng nghe sự kiện từ ext khi component bị hủy
-onUnmounted(() => {
-  window.removeEventListener('message', onExtensionMessage)
-})
-
-/** timeout hide upload progress */
-let ext_upload_timeout: ReturnType<typeof setTimeout> | null = null
-
-/** xử lý sự kiện báo upload từ extension */
-function onExtensionMessage($event: MessageEvent) {
-  /** lấy dữ liệu gửi từ extension qua window postMessage */
-  let data = $event.data
-  
-  // Parse stringified JSON if any
-  if (typeof data === 'string') {
-    try { data = JSON.parse(data) } catch (e) {}
-  }
-
-  /** bóc tách dữ liệu từ nhiều cấu trúc phản hồi khác nhau của extension */
-  const PAYLOAD = data?.r || data?.data || data
-  
-  // Kiểm tra nới lỏng: có the extension gửi 'event' thay vì 'action',
-  // hoặc có khi chỉ trả về { progress, total, status }
-  const IS_UPLOAD = 
-    PAYLOAD?.action === 'UPLOAD_IMAGE' || data?.action === 'UPLOAD_IMAGE' ||
-    PAYLOAD?.event === 'UPLOAD_IMAGE' || data?.event === 'UPLOAD_IMAGE' ||
-    PAYLOAD?.event === 'RESPONSE_SEND_FILE' || data?.event === 'RESPONSE_SEND_FILE' ||
-    (data?.progress !== undefined && data?.total !== undefined) ||
-    (PAYLOAD?.progress !== undefined && PAYLOAD?.total !== undefined)
-
-  if (IS_UPLOAD) {
-    // Ưu tiên object chứa thuộc tính progress
-    const INFO = PAYLOAD?.progress !== undefined ? PAYLOAD : data
-    
-    // Nếu event không chưa INFO.progress thì bỏ qua (avoid false positives)
-    if (INFO.progress === undefined) return
-    
-    EXT_UPLOAD_PROGRESS.value = INFO.progress || 0
-    EXT_UPLOAD_TOTAL.value = INFO.total || 0
-    
-    // Chúng ta KHÔNG lấy client_id dựa trên `select_conversation` ở đây nữa,
-    // do bị delay từ ext và enduser có thể đang click sang hội thoại khác khiến sai scope.
-    // Việc lấy đúng client_id được xử lý qua event `chatbox_ext_upload_start` phát ra từ Input.vue lúc ấn gừi.
-    
-    // Luôn hiển thị UI khi nhận event
-    IS_EXT_UPLOADING.value = true
-
-    if (ext_upload_timeout) clearTimeout(ext_upload_timeout)
-
-    // Nếu DONE hoặc tiến độ đã đạt 100% thì hẹn giờ tắt
-    if (INFO.status === 'DONE' || (INFO.total > 0 && INFO.progress >= INFO.total)) {
-      ext_upload_timeout = setTimeout(() => {
-        IS_EXT_UPLOADING.value = false
-      }, 2000)
-    }
-  }
-}
-
 // lắng nghe sự kiện từ socket khi component được tạo ra
 onMounted(() => {
   resetMessage()
-  /** thực hiện lắng nghe các sự kiện message gửi đến window */
-  window.addEventListener('message', onExtensionMessage)
   // // * reset danh sách tin nhắn lúc mới vào nếu không mở bằng modal
   // messageStore.list_message = []
 
@@ -416,11 +340,6 @@ onMounted(() => {
 
 // lắng nghe sự kiện tin nhắn mới, tạm thời ép kiểu
 listenerEventBus('chatbox_socket_message', socketNewMessage as Handler<unknown>)
-
-// Bắt đúng client_id scope cục bộ khi nhấn Upload (bỏ qua delay Ext) 
-listenerEventBus('chatbox_ext_upload_start', ((id: string) => {
-  EXT_UPLOAD_CLIENT_ID.value = id
-}) as Handler<unknown>)
 
 // lắng nghe sự kiện cập nhật tin nhắn, tạm thời ép kiểu
 listenerEventBus(
